@@ -16,6 +16,7 @@ import hudson.Util;
 import hudson.matrix.MatrixBuild;
 import hudson.matrix.MatrixProject;
 
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -33,6 +34,8 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
 
+import org.apache.commons.lang.StringUtils;
+
 public class ThrottleJobProperty extends JobProperty<AbstractProject<?,?>> {
     // Moving category to categories, to support, well, multiple categories per job.
     @Deprecated transient String category;
@@ -44,6 +47,9 @@ public class ThrottleJobProperty extends JobProperty<AbstractProject<?,?>> {
     private String throttleOption;
     private transient boolean throttleConfiguration;
     private @CheckForNull ThrottleMatrixProjectOptions matrixOptions;
+
+	private final String combinationFilter;
+	private String[] matchParamsArray;
 
     /**
      * Store a config version so we're able to migrate config on various
@@ -57,6 +63,7 @@ public class ThrottleJobProperty extends JobProperty<AbstractProject<?,?>> {
                                List<String> categories,
                                boolean throttleEnabled,
                                String throttleOption,
+							   String combinationFilter,
                                @CheckForNull ThrottleMatrixProjectOptions matrixOptions
                                ) {
         this.maxConcurrentPerNode = maxConcurrentPerNode == null ? 0 : maxConcurrentPerNode;
@@ -64,9 +71,18 @@ public class ThrottleJobProperty extends JobProperty<AbstractProject<?,?>> {
         this.categories = categories;
         this.throttleEnabled = throttleEnabled;
         this.throttleOption = throttleOption;
+		this.combinationFilter = combinationFilter;
+		this.matchParamsArray = StringUtils.split(this.combinationFilter, ",");
         this.matrixOptions = matrixOptions;
     }
 
+	public ThrottleJobProperty(Integer maxConcurrentPerNode,
+                               Integer maxConcurrentTotal,
+                               List<String> categories,
+                               boolean throttleEnabled,
+							   String throttleOption){
+		this(maxConcurrentPerNode, maxConcurrentTotal, categories, throttleEnabled, throttleOption, "");
+	}
 
     /**
      * Migrates deprecated/obsolete data
@@ -131,7 +147,9 @@ public class ThrottleJobProperty extends JobProperty<AbstractProject<?,?>> {
     public List<String> getCategories() {
         return categories;
     }
-    
+    public String getCombinationFilter(){
+    	return combinationFilter;
+    }
     public Integer getMaxConcurrentPerNode() {
         if (maxConcurrentPerNode == null)
             maxConcurrentPerNode = 0;
@@ -203,6 +221,14 @@ public class ThrottleJobProperty extends JobProperty<AbstractProject<?,?>> {
         }
     }
     
+	public ArrayList<String> getMatchParamsArray(){
+		if(this.matchParamsArray != null){
+			return new ArrayList<String>(Arrays.asList(this.matchParamsArray));
+		} else {
+			return new ArrayList<String>();
+		}
+	}
+
     @Extension
     public static final class DescriptorImpl extends JobPropertyDescriptor {
         private List<ThrottleCategory> categories;
@@ -312,7 +338,23 @@ public class ThrottleJobProperty extends JobProperty<AbstractProject<?,?>> {
 
             return m;
         }
-        
+
+		/**
+		 * Check whether the configuring model is parameterized. Called from jelly.
+		 * 
+		 * Note: Caller should pass it for the model is not bound to
+		 * {@link StaplerRequest#findAncestorObject(Class)}
+		 * when called via hetelo-list.
+		 * 
+		 * @param it
+		 * @return true if the target model is {@link AbstractProject} is parameterized.
+		 */
+		public boolean isParameterizedProject(Object it) {
+			if ((it == null) || ! (it instanceof AbstractProject))
+				return false;
+			AbstractProject p = (AbstractProject) it;
+			return p.isParameterized();
+		}    
     }
 
     public static final class ThrottleCategory extends AbstractDescribableImpl<ThrottleCategory> {
